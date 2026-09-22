@@ -135,18 +135,28 @@ if ($root) {
     }
 
     $bat = Get-ChildItem $root -Filter 'comfyui*.bat' -ErrorAction SilentlyContinue
-    $hasCudnn = $false; $hasMmap = $false
+    $hasMmap = $false
     foreach ($b in $bat) {
-        $t = Get-Content $b.FullName -Raw
-        if ($t -match 'TORCH_BACKENDS_CUDNN_ENABLED') { $hasCudnn = $true }
-        if ($t -match '--disable-mmap')               { $hasMmap  = $true }
+        if ((Get-Content $b.FullName -Raw) -match '--disable-mmap') { $hasMmap = $true }
     }
-    # RDNA2 has no cuDNN engine under ZLUDA, yet customzluda\zluda.py turns it back on.
-    if ($hasCudnn) { Ok "The launcher disables cuDNN." }
-    else { Bad "The launcher does not set TORCH_BACKENDS_CUDNN_ENABLED=0; convolutions will crash."; Fix "Run scripts\Patch-ComfyUI.ps1" }
     # safetensors mmap faults under memory pressure.
     if ($hasMmap) { Ok "The launcher passes --disable-mmap." }
     else { Warn "The launcher does not pass --disable-mmap; large models may hit an access violation." }
+
+    # The launcher copies customzluda\zluda-default.py over comfy\zluda.py on every
+    # run, and that file pins the attention backends to math only. Without it torch
+    # picks the mem-efficient CUTLASS kernels, which are built for sm80+ and reset
+    # the display driver on RDNA2. Measured on an RX 6700 XT: event 4101, one second
+    # after the process ended.
+    $zd = Join-Path $root 'comfy\customzluda\zluda-default.py'
+    if (Test-Path $zd) {
+        if (Select-String -Path $zd -Pattern 'enable_mem_efficient_sdp\(False\)' -Quiet) {
+            Ok "The launcher pins attention to the math backend."
+        } else {
+            Bad "customzluda\zluda-default.py does not disable the mem-efficient attention backend."
+            Fix "Attention will reset the display driver. Pass --use-quad-cross-attention, which avoids SDPA entirely."
+        }
+    }
 
     $torchLib = Join-Path $root 'venv\Lib\site-packages\torch\lib'
     $zdir = if ($nv) { Split-Path $nv.FullName -Parent } else { $null }

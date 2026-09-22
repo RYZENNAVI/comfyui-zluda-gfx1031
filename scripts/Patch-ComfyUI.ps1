@@ -8,10 +8,14 @@ Apply the two ComfyUI changes that gfx1031 + ZLUDA needs.
    raises AttributeError during startup.
 
 2. comfyui.bat
-   - TORCH_BACKENDS_CUDNN_ENABLED=0: RDNA2 has no cuDNN engine under ZLUDA, yet
-     customzluda\zluda.py re-enables cuDNN by default, so convolutions crash.
-   - --disable-mmap: the safetensors mmap path faults under memory pressure;
-     this copies tensors instead.
+   --disable-mmap: the safetensors mmap path faults under memory pressure; this
+   copies tensors instead.
+
+Note that this does not touch cuDNN. Measured on an RX 6700 XT, convolution with
+cuDNN enabled runs fine at 0.0147s per 320->320 3x3 at 128x128, and the launcher
+pins cuDNN off anyway by copying customzluda\zluda-default.py over comfy\zluda.py
+on every run. Anything written into comfy\zluda.py is overwritten at the next
+launch, so patches belong in customzluda\zluda-default.py instead.
 
 Both files are backed up as .gfx1031.bak before the first change. Running this
 more than once is harmless.
@@ -69,23 +73,6 @@ for ($i = 0; $i -lt $lines.Count; $i++) {
         $lines[$i] = $lines[$i] -replace '"\s*$', ' --disable-mmap"'
         $changed = $true
     }
-}
-
-# -match on an array filters rather than tests, so this needs the outer -not.
-if (-not ($lines -match 'TORCH_BACKENDS_CUDNN_ENABLED')) {
-    $block = @(
-        '',
-        ':: RDNA2 has no cuDNN engine under ZLUDA; convolutions must use torch native.',
-        ':: customzluda\zluda.py re-enables cuDNN by default, so force it off here.',
-        'set "TORCH_BACKENDS_CUDNN_ENABLED=0"'
-    )
-    $idx = [array]::FindIndex([string[]]$lines, [Predicate[string]] { $args[0] -match '^\s*set "ZLUDA_COMGR_LOG_LEVEL' })
-    if ($idx -ge 0) {
-        $lines = @($lines[0..$idx]) + $block + @($lines[($idx + 1)..($lines.Count - 1)])
-    } else {
-        $lines = @($lines) + $block
-    }
-    $changed = $true
 }
 
 if ($changed) {

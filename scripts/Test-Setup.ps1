@@ -45,6 +45,16 @@ if not torch.cuda.is_available():
     sys.exit("torch cannot see the GPU, stopping here.")
 print("device      ", torch.cuda.get_device_name(0))
 print("cudnn       ", torch.backends.cudnn.enabled)
+
+# ComfyUI-Zluda pins these in customzluda/zluda-default.py, and this script has to
+# match the real runtime. Left at the torch defaults, attention dispatches to the
+# mem-efficient CUTLASS kernels, which are built for sm80+ and abort on RDNA2 with
+#   FATAL: kernel `fmha_cutlassF_f16_aligned_64x64_rf_sm80` is for sm80-sm100
+# tens of thousands of times, and then reset the display driver (event 4101).
+torch.backends.cuda.enable_flash_sdp(False)
+torch.backends.cuda.enable_math_sdp(True)
+torch.backends.cuda.enable_mem_efficient_sdp(False)
+print("sdp backend  math only (flash and mem-efficient off, as ComfyUI-Zluda sets them)")
 print()
 
 fail = []
@@ -70,7 +80,7 @@ except Exception as e:
     fail.append(("conv2d fp16", e))
     print("conv2d fp16  FAILED:", e)
 
-# attention
+# attention, on the math backend selected above
 try:
     q = torch.randn(1, 8, 256, 64, device="cuda", dtype=torch.float16)
     torch.nn.functional.scaled_dot_product_attention(q, q, q)

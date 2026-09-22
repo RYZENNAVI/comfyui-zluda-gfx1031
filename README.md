@@ -11,7 +11,7 @@ Work around that and four more problems follow, each with a misleading error mes
 1. **No gfx1031 kernels** in official rocBLAS.
 2. **ZLUDA and HIP major versions must match exactly.** ZLUDA's `nvcuda.dll` hardcodes `amdhip64_6.dll` or `amdhip64_7.dll` in its import table. A mismatch gives you a bare `0xC0000135` and nothing else to go on.
 3. **Python 3.8+ no longer searches PATH** for extension-module DLL dependencies. Editing PATH does nothing; the DLLs have to sit in `venv\Lib\site-packages\torch\lib`.
-4. **RDNA2 has no cuDNN engine under ZLUDA**, yet ComfyUI-Zluda re-enables cuDNN by default, so convolutions crash.
+4. **Attention resets the display driver** if torch is left at its defaults. ZLUDA reports compute capability (8, 8), so torch dispatches attention to the mem-efficient backend, whose CUTLASS kernels are built for sm80+ and abort thousands of times before taking the driver down with them. ComfyUI-Zluda pins the backends to math-only, so you only meet this when writing your own test script.
 
 Each of these is findable on its own. Assembling a combination that actually works is the hard part. This project scripts the whole thing.
 
