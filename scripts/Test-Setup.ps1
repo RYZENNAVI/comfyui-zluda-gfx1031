@@ -36,6 +36,22 @@ if (-not (Test-Path $py)) { throw "No $py - the ComfyUI venv is not set up." }
 $zluda = Get-ChildItem $root -Recurse -Filter 'zluda.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
 if (-not $zluda) { throw "zluda.exe not found." }
 
+# Sharing the GPU with a running ComfyUI turns any result here into guesswork, and
+# an out-of-memory failure looks nothing like the problems this script tests for.
+# Match on main.py as well as the path, so an unrelated script using the same venv
+# is not mistaken for ComfyUI.
+$rootPrefix = $root.TrimEnd('\') + '\'
+$others = @(Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='zluda.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -and $_.CommandLine -like "*$rootPrefix*" })
+
+$running = @($others | Where-Object { $_.CommandLine -match '\bmain\.py\b' })
+if ($running.Count -gt 0) {
+    throw "ComfyUI looks like it is running (PID $(($running.ProcessId) -join ', ')). Close it first; sharing the GPU makes these results meaningless."
+}
+if ($others.Count -gt 0) {
+    Write-Host "Note: $($others.Count) other process(es) are using this ComfyUI install (PID $(($others.ProcessId) -join ', ')). They may still be holding VRAM." -ForegroundColor Yellow
+}
+
 $code = @'
 import torch, sys, os
 
@@ -106,8 +122,6 @@ $tmp = Join-Path $env:TEMP "gfx1031-selftest-$PID.py"
 $log = Join-Path $env:TEMP "gfx1031-selftest-$PID.log"
 Set-Content -Path $tmp -Value $code -Encoding UTF8
 
-# Match how comfyui.bat launches, otherwise this tests a different environment.
-$env:TORCH_BACKENDS_CUDNN_ENABLED = '0'
 $env:PYTHONIOENCODING = 'utf-8'
 
 Write-Host "Running the self-test in $root (the first run is slow while ZLUDA JIT-compiles kernels)..."
