@@ -1,74 +1,24 @@
 # comfyui-zluda-gfx1031
 
-Get ComfyUI running on an **RX 6700 / 6700 XT / 6750 XT** (gfx1031) under ZLUDA on Windows.
+> **This project has moved to [comfyui-zluda-rdna2](https://github.com/RYZENNAVI/comfyui-zluda-rdna2).**
+> This repository is archived and no longer maintained. Everything here is also there, kernel installation included, and the version there has been corrected in places this one was not.
 
-## Why this GPU needs its own project
+## What happened
 
-gfx1031 is not on the official AMD ROCm support list. That is not a performance gap — **official rocBLAS ships no kernels for this GPU at all**, so the first matmul dies with `no kernel image is available`.
+This project covered gfx1031 (RX 6700 XT, 6750 XT, 6700). A sister project covered gfx1030 (RX 6950 XT, 6900 XT, 6800 XT, 6800). Once both had been verified against real hardware and the findings were compared, almost everything turned out to be shared: the ZLUDA and HIP version matching, the DLLs that go into `torch\lib`, the launcher that overwrites the file you just patched, and the attention backend that resets the display driver.
 
-Work around that and four more problems follow, each with a misleading error message:
+Exactly one thing genuinely differs, and it is the kernels. gfx1031 is not on the official AMD ROCm support list, so official rocBLAS ships no kernels for it and they have to be installed; gfx1030 is, so it needs nothing. The merged project detects which card you have and runs the kernel step only where it belongs. `Install-Kernels.ps1`, both Borrow and Download modes, moved across unchanged and was re-verified on an RX 6700 XT.
 
-1. **No gfx1031 kernels** in official rocBLAS.
-2. **ZLUDA and HIP major versions must match exactly.** ZLUDA's `nvcuda.dll` hardcodes `amdhip64_6.dll` or `amdhip64_7.dll` in its import table. A mismatch gives you a bare `0xC0000135` and nothing else to go on.
-3. **Python 3.8+ no longer searches PATH** for extension-module DLL dependencies. Editing PATH does nothing; the DLLs have to sit in `venv\Lib\site-packages\torch\lib`.
-4. **Attention resets the display driver** if torch is left at its defaults. ZLUDA reports compute capability (8, 8), so torch dispatches attention to the mem-efficient backend, whose CUTLASS kernels are built for sm80+ and abort thousands of times before taking the driver down with them. ComfyUI-Zluda pins the backends to math-only, so you only meet this when writing your own test script.
+Keeping two repositories meant every fix had to be made twice, so they were merged.
 
-Each of these is findable on its own. Assembling a combination that actually works is the hard part. This project scripts the whole thing.
+## What the merged version fixes that this one got wrong
 
-## Usage
+- **cuDNN.** This repository claimed RDNA2 has no cuDNN engine under ZLUDA and that convolutions crash without it disabled, and `Patch-ComfyUI.ps1` set `TORCH_BACKENDS_CUDNN_ENABLED=0` to prevent that. Measured on both architectures, the claim is not true, and on the standard launcher that variable is never read: `comfyui.bat` installs `zluda-default.py`, which hardcodes the setting.
+- **Attention.** The driver resets really do happen, but they come from the mem-efficient SDPA backend, whose CUTLASS kernel is built for the wrong SM version. This repository's own `Test-Setup.ps1` used to call SDPA with the default backends, which is exactly the configuration that triggers them.
+- **Hardware claims.** The scripts accept every desktop RDNA2 card, but only an RX 6700 XT and an RX 6950 XT have actually been run on, and mobile parts such as the RX 6700S are a different chip entirely. The merged version says so and refuses to classify them.
 
-Run as Administrator when HIP lives under `Program Files` (the scripts check whether they can write, and say so if not).
+## Go here instead
 
-```powershell
-git clone https://github.com/RYZENNAVI/comfyui-zluda-gfx1031
-cd comfyui-zluda-gfx1031
-.\install.ps1
-```
+**https://github.com/RYZENNAVI/comfyui-zluda-rdna2**
 
-Reopen your terminal afterwards, then launch ComfyUI as usual.
-
-### Individual steps
-
-```powershell
-.\scripts\Check-Environment.ps1    # read-only diagnostics; run this first whenever something breaks
-.\scripts\Install-Kernels.ps1      # install gfx1031 kernels
-.\scripts\Patch-ComfyUI.ps1        # patch ComfyUI
-.\scripts\Test-Setup.ps1           # run matmul, conv2d and SDPA on the GPU
-```
-
-### Two kernel sources
-
-```powershell
-.\install.ps1                  # default: borrow the gfx1030 kernels (same RDNA2 ISA)
-.\install.ps1 -Mode Download   # download community-built real gfx1031 kernels, usually faster
-```
-
-Start with the default to get a working setup, then switch to `-Mode Download` if it feels slow. Download mode replaces the rocBLAS library outright; the original is kept as `library.bak` next to it.
-
-|  | Borrow | Download |
-|---|---|---|
-| Network needed | no | yes |
-| Third-party binaries | none | yes (upstream is GPL-3.0) |
-| Works | yes, gfx1030 and gfx1031 are ISA-compatible | yes |
-| Performance | tuning parameters were chosen for gfx1030 | compiled for actual gfx1031 |
-
-## Requirements
-
-- Windows 10/11
-- RX 6700 / 6700 XT / 6750 XT
-- A working [ComfyUI-Zluda](https://github.com/patientx/ComfyUI-Zluda) install
-- HIP SDK for Windows, matching your ZLUDA version: ZLUDA 3.9.5 goes with HIP 6.x, 3.9.6 with HIP 7.x
-- [7-Zip](https://www.7-zip.org/) for `-Mode Download` — upstream packs are `.7z`, which the bundled Windows tools cannot extract
-
-## When something breaks
-
-Run `.\scripts\Check-Environment.ps1` first, then look the error up in **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)**, which maps each error code and symptom to its real cause.
-
-## Third-party kernels
-
-`-Mode Download` fetches from these at install time:
-
-- [likelovewant/ROCmLibs-for-gfx1103-AMD780M-APU](https://github.com/likelovewant/ROCmLibs-for-gfx1103-AMD780M-APU)
-- [brknsoul/ROCmLibs](https://github.com/brknsoul/ROCmLibs)
-
-**This repository redistributes none of those binaries.** They are GPL-3.0, and redistributing them would carry the corresponding obligations. The scripts only help you download them from upstream; whether to install them is your call. The scripts in this repository are MIT.
+The full history of this repository was merged into it rather than copied, so none of it was lost.
