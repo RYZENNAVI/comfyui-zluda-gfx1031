@@ -22,6 +22,9 @@ ComfyUI root directory. Auto-detected when omitted.
 .PARAMETER HipRoot
 HIP install root. Auto-detected when omitted.
 
+.PARAMETER Yes
+Download mode only: skip the confirmation before downloading the kernel pack.
+
 .EXAMPLE
 .\install.ps1
 
@@ -33,7 +36,8 @@ param(
     [ValidateSet('Borrow', 'Download')]
     [string]$Mode = 'Borrow',
     [string]$ComfyUIRoot,
-    [string]$HipRoot
+    [string]$HipRoot,
+    [switch]$Yes
 )
 
 . (Join-Path $PSScriptRoot 'scripts\Common.ps1')
@@ -51,7 +55,7 @@ Write-Host "######## 1/4 checking the environment ########" -ForegroundColor Cya
 
 Write-Host ""
 Write-Host "######## 2/4 installing gfx1031 kernels ########" -ForegroundColor Cyan
-& (Join-Path $PSScriptRoot 'scripts\Install-Kernels.ps1') -Mode $Mode -HipRoot $HipRoot
+& (Join-Path $PSScriptRoot 'scripts\Install-Kernels.ps1') -Mode $Mode -HipRoot $HipRoot -Yes:$Yes
 
 Write-Host ""
 Write-Host "######## 3/4 patching ComfyUI ########" -ForegroundColor Cyan

@@ -21,13 +21,17 @@ HIP install root. Auto-detected when omitted; the newest version wins.
 .PARAMETER PackPath
 Download mode only: a pack you already downloaded, either the archive or an
 extracted directory. Skips the download when given.
+
+.PARAMETER Yes
+Download mode only: skip the confirmation before downloading.
 #>
 [CmdletBinding()]
 param(
     [ValidateSet('Borrow', 'Download')]
     [string]$Mode = 'Borrow',
     [string]$HipRoot,
-    [string]$PackPath
+    [string]$PackPath,
+    [switch]$Yes
 )
 
 . (Join-Path $PSScriptRoot 'Common.ps1')
@@ -103,7 +107,7 @@ if ($Mode -eq 'Borrow') {
 }
 else {
     if (-not $PackPath) {
-        $PackPath = & (Join-Path $PSScriptRoot 'Get-KernelPack.ps1') -HipVersion $hip.Version
+        $PackPath = & (Join-Path $PSScriptRoot 'Get-KernelPack.ps1') -HipVersion $hip.Version -Yes:$Yes
     }
 
     if ((Get-Item $PackPath).PSIsContainer) {
@@ -119,6 +123,10 @@ else {
         Select-Object -First 1
     if (-not $srcLib) { throw "No library directory containing gfx1031 files inside $dir" }
 
+    # Replace the library outright rather than merging the pack into it. Leaving
+    # the stock manifests next to the ones from the pack is an untested mixture,
+    # and everything that was there is already in the backup.
+    Get-ChildItem $LIB -Force | Remove-Item -Recurse -Force
     Copy-Item (Join-Path $srcLib.FullName '*') -Destination $LIB -Recurse -Force
 
     # Some packs ship a matching rocblas.dll; swap it too, with its own backup.

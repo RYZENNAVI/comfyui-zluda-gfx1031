@@ -43,7 +43,7 @@ Reopen your terminal afterwards, then launch ComfyUI as usual.
 .\install.ps1 -Mode Download   # download community-built real gfx1031 kernels, usually faster
 ```
 
-Start with the default to get a working setup, then switch to `-Mode Download` if it feels slow.
+Start with the default to get a working setup, then switch to `-Mode Download` if it feels slow. Download mode replaces the rocBLAS library outright; the original is kept as `library.bak` next to it.
 
 |  | Borrow | Download |
 |---|---|---|
